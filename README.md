@@ -1,475 +1,595 @@
-# OverTheWire **Leviathan** — Walkthrough & Appunti
+# OverTheWire Leviathan — Walkthrough & Notes
 
-[![Stato](https://img.shields.io/badge/Completato-Livelli_0%E2%86%927-brightgreen)](#)
-[![Sistema](https://img.shields.io/badge/OS-Ubuntu_22.04_LTS-lightgrey)](#)
-[![Ultimo aggiornamento](https://img.shields.io/badge/Aggiornamento-2025--12--01-blue)](#)
+[![Status](https://img.shields.io/badge/Status-Completed%20Levels_0%E2%86%927-brightgreen)](#)
+[![System](https://img.shields.io/badge/OS-Ubuntu_22.04_LTS-lightgrey)](#)
+[![Last Updated](https://img.shields.io/badge/Updated-2025--12--01-blue)](#)
 
-> Percorso riproducibile attraverso **OverTheWire — Leviathan**.  
-> Questo README documenta l’approccio, i comandi e le tecniche usate per risolvere i livelli.  
-> Tutte le **password sono oscurate** in conformità con la policy ufficiale di OverTheWire.
-
----
-
-## 🧭 Introduzione
-Questa guida raccoglie le soluzioni per i livelli di **Leviathan (0 → 7)**, con:
-- comandi e workflow utilizzati;
-- spiegazione dei passaggi logici;
-- esempi di snippet testabili su Linux (**Ubuntu 22.04 LTS**).
+> Practical walkthrough and technical notes for the OverTheWire Leviathan wargame.
+> This repository documents the filesystem, binary-analysis and reverse-engineering techniques used to solve levels 0–7.
+> Passwords and challenge credentials are redacted.
 
 ---
 
-## 🧰 Tools — principali comandi e servizi
+## Introduction
 
-### 🌐 Rete
-`ssh`
+Leviathan is a Linux-based wargame focused on basic reverse engineering, binary analysis and privilege boundaries.
 
-### 📁 Filesystem & gestione file
-`ls` `cd` `pwd` `mktemp` `touch` `ln` `chmod` `cat` 
+The challenge introduces:
 
-### 🧾 Testo & stream processing
-`grep` `strings` `tr` `echo` `printf`
+- Hidden files and backups
+- Binary inspection
+- Static and dynamic analysis
+- `strings`
+- `ltrace`
+- `gdb`
+- `strcmp()` analysis
+- `system()` and command construction
+- Symbolic links
+- File permissions
+- Hard-coded values
+- SUID-style privilege boundaries
+- Basic x86 reverse engineering
 
-### 🔡 Analisi binari & tracing
-`ltrace` `gdb`
-
-### 🧪 Utility di debugging / conversione
-`printf`
-
----
-
-# 🧩 Percorso dei Livelli
-- Ogni livello introduce un nuovo concetto di sicurezza o un comando Linux utile alla progressione.  
-- Le password sono **oscurate** per rispetto della policy di OverTheWire.  
-- Tutti gli esempi sono **riproducibili su Ubuntu 22.04 LTS**.
-
-<details>
-<summary><b>Indice rapido livelli 0 → 7</b></summary>
-
-- [🔹 Livello 0 → 1](#-livello-0--1)  
-- [🔹 Livello 1 → 2](#-livello-1--2)  
-- [🔹 Livello 2 → 3](#-livello-2--3)  
-- [🔹 Livello 3 → 4](#-livello-3--4)  
-- [🔹 Livello 4 → 5](#-livello-4--5)  
-- [🔹 Livello 5 → 6](#-livello-5--6)  
-- [🔹 Livello 6 → 7](#-livello-6--7)  
-
-</details>
+All exercises were performed in an isolated Linux environment.
 
 ---
 
-## ✅ Formato dei contenuti
-Ogni livello seguente è strutturato con:
+## Tools
 
-1. **🎯 Obiettivo** — descrizione breve del livello;
-2. **💻 Comandi principali** — snippet eseguibili;
-3. **🧠 Spiegazione** — analisi del funzionamento;  
-4. **🪄 Takeaway** — concetto o tecnica da ricordare.
+### Remote Access
 
----
-
-## 🔹 Livello 0 → 1
-
-### 🎯 Obiettivo
-Accedere come `leviathan0` e trovare la password per il livello successivo.
-
-### 💻 Comandi principali
-
-```bash
-leviathan0@leviathan:~$ ls -a
-.  ..  .backup  .bash_logout  .bashrc  .profile
-
-leviathan0@leviathan:~$ cd .backup/
-
-leviathan0@leviathan:~/.backup$ cat bookmarks.html | grep leviathan
-<DT><A HREF="http://leviathan.labs.overthewire.org/passwordus.html | This will be fixed later, the password for leviathan1 is [REDACTED]" ADD_DATE="1155384634" LAST_CHARSET="ISO-8859-1" ID="rdf:#$2wIU71">password to leviathan1</A>
-
-# → password per il livello 1
-# [REDACTED]
+```text
+ssh
 ```
 
-### 🧠 Spiegazione
-La password è inclusa in un file di backup dei bookmarks. `grep` filtra la riga che contiene "leviathan" e rivela la password.
+### Filesystem and File Management
 
-### 🪄 Takeaway
-- Controllare directory nascoste per file di configurazione o backup;
-- `grep` è estremamente pratico per scavare informazioni in file di testo.
+```text
+ls
+cd
+pwd
+mktemp
+touch
+ln
+chmod
+cat
+```
 
----
+### Text Processing
 
-## 🔹 Livello 1 → 2
-
-### 🎯 Obiettivo
-Analizzare il binario `check` per scoprire la password per il livello successivo.
-
-### 💻 Comandi principali
-```bash
-leviathan1@leviathan:~$ ls
-check
-
-leviathan1@leviathan:~$ strings ./check
-td8 
-/lib/ld-linux.so.2
-_IO_stdin_used
-puts
-__stack_chk_fail
-system
-getchar
-__libc_start_main
+```text
+grep
+strings
+tr
+echo
 printf
-setreuid
+```
+
+### Binary Analysis
+
+```text
+file
+strings
+ltrace
+gdb
+```
+
+### Scripting and Conversion
+
+```text
+Python 3
+printf
+```
+
+---
+
+## Methodology
+
+The general workflow used throughout Leviathan was:
+
+1. Enumerate the current environment.
+2. Identify executables, hidden files and other potentially relevant artefacts.
+3. Inspect binaries statically.
+4. Trace their runtime behaviour when necessary.
+5. Determine how input reaches security-sensitive functions.
+6. Identify permission or trust-boundary weaknesses.
+7. Construct the minimal input required to exploit the weakness.
+8. Verify the resulting privilege transition.
+
+The challenge is particularly useful for developing a basic reverse-engineering workflow:
+
+```text
+enumeration
+    ↓
+static analysis
+    ↓
+dynamic analysis
+    ↓
+identify security boundary
+    ↓
+construct input
+    ↓
+verify behaviour
+```
+
+---
+
+## Level 0 → 1
+
+### Objective
+
+Locate the password for `leviathan1`.
+
+### Method
+
+Inspect the home directory, including hidden files:
+
+```bash
+ls -la
+```
+
+A hidden `.backup` directory contains an archived browser bookmark file:
+
+```bash
+cd .backup
+grep leviathan bookmarks.html
+```
+
+The relevant entry contains the password for the next level.
+
+### Takeaway
+
+Backups, configuration files and hidden directories can expose sensitive information even when the primary application interface does not.
+
+During enumeration, do not restrict the search to visible files.
+
+---
+
+## Level 1 → 2
+
+### Objective
+
+Analyse the `check` binary and determine the password required to obtain a shell as `leviathan2`.
+
+### Static Analysis
+
+Inspect readable strings:
+
+```bash
+strings ./check
+```
+
+Among the output are security-relevant functions and strings such as:
+
+```text
 strcmp
-geteuid
-libc.so.6
-GLIBC_2.4
-GLIBC_2.34
-GLIBC_2.0
-__gmon_start__
-secr
-love
-password: 
-/bin/sh
+setreuid
+system
+password:
 Wrong password, Good Bye ...
-;*2$"0
-GCC: (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0
-...
-(check output truncated for brevity)
 ```
+
+### Dynamic Analysis
+
+Trace library calls with:
 
 ```bash
-leviathan1@leviathan:~$ ltrace ./check
-__libc_start_main(0x80490ed, 1, 0xffffd384, 0 <unfinished ...>
-printf("password: ")                                                                 = 10
-getchar(0, 0, 0x786573, 0x646f67password: testpassword
-)                                                    = 116
-getchar(0, 116, 0x786573, 0x646f67)                                                  = 101
-getchar(0, 0x6574, 0x786573, 0x646f67)                                               = 115
-strcmp("tes", "sex")                                                                 = 1
-puts("Wrong password, Good Bye ..."Wrong password, Good Bye ...
-)                                                 = 29
-+++ exited (status 0) +++
+ltrace ./check
 ```
+
+The trace shows that the program reads user input with `getchar()` and compares it using `strcmp()`.
+
+The comparison reveals the expected password:
+
+```text
+strcmp("input", "sex")
+```
+
+### Verification
 
 ```bash
-leviathan1@leviathan:~$ ./check
-password: sex
-$ whoami
-leviathan2
-$ cat /etc/leviathan_pass/leviathan2
-# → password per il livello 2
-# [REDACTED]
+./check
 ```
 
-### 🧠 Spiegazione
-- `strings` mostra stringhe leggibili nel binario;
-- `ltrace` mostra le chiamate runtime: si vede che il programma legge caratteri (`getchar`) e effettua un `strcmp`;
-- Eseguendo il binario e inserendo "sex" si ottiene accesso alla shell del livello successivo e si legge la password.
+Enter the recovered password.
 
-### 🪄 Takeaway
-- Combinare analisi statica (`strings`) e dinamica (`ltrace`) è efficace su binari semplici.
+The binary opens a shell in the context of `leviathan2`.
+
+The next password can then be read from:
+
+```bash
+cat /etc/leviathan_pass/leviathan2
+```
+
+### Takeaway
+
+Combining static and dynamic analysis is often more efficient than attempting to fully reverse engineer a small binary.
+
+`strings` reveals useful artefacts, while `ltrace` can expose the values passed to library functions at runtime.
 
 ---
 
-## 🔹 Livello 2 → 3
+## Level 2 → 3
 
-### 🎯 Obiettivo
-Usare `printfile` per leggere la password del livello successivo, aggirando problemi con spazi nei nomi dei file.
+### Objective
 
-### 💻 Comandi principali
+Use the `printfile` binary to access a protected file despite unsafe handling of filenames containing spaces.
+
+### Method
+
+Create a temporary working directory:
+
 ```bash
-leviathan2@leviathan:~$ mktemp -d
-/tmp/tmp.l2kik6XJX6
-
-leviathan2@leviathan:~$ touch /tmp/tmp.l2kik6XJX6/"test file.txt"
-
-leviathan2@leviathan:~$ ls -la /tmp/tmp.l2kik6XJX6
-total 436
-drwx------    2 leviathan2 leviathan2   4096 Dec  1 10:22 .
-drwxrwx-wt 1441 root       root       438272 Dec  1 10:23 ..
--rw-rw-r--    1 leviathan2 leviathan2      0 Dec  1 10:22 test file.txt
-
-leviathan2@leviathan:~$ ltrace ./printfile /tmp/tmp.l2kik6XJX6/"test file.txt"
-__libc_start_main(0x80490ed, 2, 0xffffd354, 0 <unfinished ...>
-access("/tmp/tmp.l2kik6XJX6/test file.tx"..., 4)                                     = 0
-snprintf("/bin/cat /tmp/tmp.l2kik6XJX6/tes"..., 511, "/bin/cat %s", "/tmp/tmp.l2kik6XJX6/test file.tx"...) = 42
-geteuid()                                                                            = 12002
-geteuid()                                                                            = 12002
-setreuid(12002, 12002)                                                               = 0
-system("/bin/cat /tmp/tmp.l2kik6XJX6/tes".../bin/cat: /tmp/tmp.l2kik6XJX6/test: No such file or directory
-/bin/cat: file.txt: No such file or directory
- <no return ...>
---- SIGCHLD (Child exited) ---
-<... system resumed> )                                                               = 256
-+++ exited (status 0) +++
-
-leviathan2@leviathan:~$ ln -s /etc/leviathan_pass/leviathan3 /tmp/tmp.l2kik6XJX6/test
-
-leviathan2@leviathan:~$ ls -la /tmp/tmp.l2kik6XJX6
-total 436
-drwx------    2 leviathan2 leviathan2   4096 Dec  1 10:24 .
-drwxrwxrwt 1442 root       root       438272 Dec  1 10:24 ..
-lrwxrwxrwx    1 leviathan2 leviathan2     30 Dec  1 10:24 test -> /etc/leviathan_pass/leviathan3
--rw-rw-r--    1 leviathan2 leviathan2      0 Dec  1 10:22 test file.txt
-
-leviathan2@leviathan:~$ chmod 777 /tmp/tmp.l2kik6XJX6
-
-leviathan2@leviathan:~$ ./printfile /tmp/tmp.l2kik6XJX6/"test file.txt"
-# → password per il livello 3
-# [REDACTED]
-/bin/cat: file.txt: No such file or directory
+mktemp -d
 ```
 
-### 🧠 Spiegazione
-- `printfile` costruisce una stringa per `system("/bin/cat ...")`, ma non gestisce nomi con spazi: il comando diventa `/bin/cat /tmp/.../test file.txt` e `cat` interpreta "test" e "file.txt" come due argomenti;
-- Creando un symlink chiamato `test` che punta al file con la password, e impostando permessi adeguati, si riesce a far leggere al programma il contenuto desiderato.
+Create a file containing a space:
 
-### 🪄 Takeaway
-- Creare symlink e gestire i permessi è una tecnica utile per aggirare limitazioni nella gestione dei nomi di file.
+```bash
+touch "/tmp/tmp.XXXXXX/test file.txt"
+```
+
+Trace the program:
+
+```bash
+ltrace ./printfile "/tmp/tmp.XXXXXX/test file.txt"
+```
+
+The trace shows that the binary constructs a shell command similar to:
+
+```text
+/bin/cat <user-controlled-path>
+```
+
+Because the path contains a space, the resulting command is interpreted as multiple arguments.
+
+A symbolic link can be used to control the first argument:
+
+```bash
+ln -s /etc/leviathan_pass/leviathan3 /tmp/tmp.XXXXXX/test
+```
+
+The vulnerable program can then be invoked using:
+
+```bash
+./printfile "/tmp/tmp.XXXXXX/test file.txt"
+```
+
+The `cat` invocation resolves `test` through the symlink and accesses the protected file.
+
+### Takeaway
+
+Constructing shell commands from user-controlled paths is unsafe.
+
+Spaces, metacharacters and shell parsing can alter the meaning of an intended file operation. Symbolic links can further redirect filesystem operations to attacker-controlled targets.
 
 ---
 
-## 🔹 Livello 3 → 4
+## Level 3 → 4
 
-### 🎯 Obiettivo
-Individuare la password richiesta da `level3` per ottenere la shell del livello successivo.
+### Objective
 
-### 💻 Comandi principali
+Determine the password checked by the `level3` binary.
+
+### Method
+
+Run the binary with an incorrect value:
+
 ```bash
-leviathan3@leviathan:~$ ls
-level3
-
-leviathan3@leviathan:~$ ./level3
-Enter the password> test
-bzzzzzzzzap. WRONG
-
-leviathan3@leviathan:~$ ltrace ./level3
-__libc_start_main(0x80490ed, 1, 0xffffd374, 0 <unfinished ...>
-strcmp("h0no33", "kakaka")                                                           = -1
-printf("Enter the password> ")                                                       = 20
-fgets(Enter the password> test 
-"test\n", 256, 0xf7fae5c0)                                                     = 0xffffd14c
-strcmp("test\n", "snlprintf\n")                                                      = 1
-puts("bzzzzzzzzap. WRONG"bzzzzzzzzap. WRONG
-)                                                           = 19
-+++ exited (status 0) +++
-
-leviathan3@leviathan:~$ ./level3
-Enter the password> snlprintf  
-[You've got shell]!
-$ whoami
-leviathan4
-$ cat /etc/leviathan_pass/leviathan4
-# → password per il livello 4
-# [REDACTED]
+./level3
 ```
 
-### 🧠 Spiegazione
-- `ltrace` mostra il confronto fatto tramite `strcmp` e che il programma legge con `fgets`;
-- Inserendo la stringa corretta (notare il newline gestito da `fgets`), il binario apre una shell di livello superiore.
+Then trace the execution:
 
-### 🪄 Takeaway
-- `ltrace` è utile per vedere esattamente quali stringhe vengono confrontate e come il programma legge l'input.
+```bash
+ltrace ./level3
+```
+
+The trace reveals a call to:
+
+```text
+strcmp()
+```
+
+and exposes the expected password:
+
+```text
+strcmp("input", "snlprintf\n")
+```
+
+The correct value can then be supplied to the program:
+
+```bash
+./level3
+```
+
+The binary opens a shell as `leviathan4`.
+
+Read the next password:
+
+```bash
+cat /etc/leviathan_pass/leviathan4
+```
+
+### Takeaway
+
+Runtime tracing can reveal sensitive values passed to library functions without requiring a complete static reverse engineering of the binary.
 
 ---
 
-## 🔹 Livello 4 → 5
+## Level 4 → 5
 
-### 🎯 Obiettivo
-Decodificare la stringa binaria trovata nella directory `.trash/bin` per ottenere la password per il livello successivo.
+### Objective
 
-### 💻 Comandi principali
+Decode a binary representation printed by the `bin` executable.
+
+### Method
+
+Inspect the hidden directory:
+
 ```bash
-leviathan4@leviathan:~$ ls -a
-.  ..  .bash_logout  .bashrc  .profile  .trash
+ls -la
+cd .trash
+ls
+```
 
-leviathan4@leviathan:~$ cd .trash/
+Execute the program:
 
-leviathan4@leviathan:~/.trash$ ls
-bin
+```bash
+./bin
+```
 
-leviathan4@leviathan:~/.trash$ ./bin
-00110000 01100100 01111001 01111000 01010100 00110111 01000110 00110100 01010001 01000100 00001010
+It prints the password as groups of binary digits.
 
-leviathan4@leviathan:~/.trash$ ltrace ./bin
-__libc_start_main(0x80490ad, 1, 0xffffd364, 0 <unfinished ...>
-fopen("/etc/leviathan_pass/leviathan5", "r")                                         = 0
-+++ exited (status 255) +++
+The groups can be converted to ASCII using standard shell tools:
 
-leviathan4@leviathan:~/.trash$ echo "00110000 01100100 01111001 01111000 01010100 00110111 01000110 00110100 01010001 01000100 00001010" \
-| tr ' ' '\n' \
-| while read b; do printf "\\$(printf '%03o' "$((2#$b))")"; done; \
+```bash
+echo "00110000 01100100 01111001 ..." |
+tr ' ' '\n' |
+while read b; do
+    printf "\\$(printf '%03o' "$((2#$b))")"
+done
 printf "\n"
-# → password per il livello 5
-# [REDACTED]
 ```
 
-### 🧠 Spiegazione
-- Il binario stampa la password in formato binario (stringhe di bit);
-- Con una pipeline che trasforma i blocchi binari in caratteri ASCII si ottiene la password leggibile.
+The resulting ASCII string is the password for `leviathan5`.
 
-### 🪄 Takeaway
-- Saper convertire da binario a testo in shell è una skill pratica e veloce.
+### Takeaway
+
+Security analysis frequently involves converting between different data representations.
+
+Understanding binary, hexadecimal and ASCII representations is useful when inspecting binaries, network data and encoded output.
 
 ---
 
-## 🔹 Livello 5 → 6
+## Level 5 → 6
 
-### 🎯 Obiettivo
-Ottenere la password per il livello successivo tramite symlink.
+### Objective
 
-### 💻 Comandi principali
+Exploit a symbolic link to redirect a file operation performed by the `leviathan5` executable.
+
+### Method
+
+Create a symlink pointing to the protected password file:
+
 ```bash
-leviathan5@leviathan:~$ ls
-leviathan5
-
-leviathan5@leviathan:~$ ln -s /etc/leviathan_pass/leviathan6 /tmp/file.log
-
-leviathan5@leviathan:~$ ./leviathan5
-# → password per il livello 6
-# [REDACTED]
+ln -s /etc/leviathan_pass/leviathan6 /tmp/file.log
 ```
 
-### 🧠 Spiegazione
-- Creando un link simbolico verso il file contenente la password e lanciando il binario, il programma legge il file di destinazione e stampa la password.
+Run the provided executable:
 
-### 🪄 Takeaway
-- Symlink possono essere sfruttati per far leggere a programmi con percorsi fissi file arbitrari.
+```bash
+./leviathan5
+```
+
+The program follows the symbolic link and reads the protected file.
+
+### Takeaway
+
+Symbolic links can redirect programs that operate on predictable paths.
+
+Programs running with elevated privileges must not blindly trust filesystem paths that can be influenced by lower-privileged users.
 
 ---
 
-## 🔹 Livello 6 → 7
+## Level 6 → 7
 
-### 🎯 Obiettivo
-Reverse-engineering del binario `leviathan6` con `gdb` per trovare il codice a 4 cifre che permette l'elevazione a `leviathan7`.
+### Objective
 
-### 💻 Comandi principali
+Reverse engineer `leviathan6` and recover the four-digit code required to obtain a shell as `leviathan7`.
+
+### Initial Analysis
+
+Inspect the binary:
+
 ```bash
-leviathan6@leviathan:~$ ls
-leviathan6
+ls
+```
 
-leviathan6@leviathan:~$ ./leviathan6
-usage: ./leviathan6 <4 digit code>
+Run it without a valid code:
 
-leviathan6@leviathan:~$ ./leviathan6 1234
-Wrong
+```bash
+./leviathan6 1234
+```
 
-# Avvio gdb per analisi
-leviathan6@leviathan:~$ gdb --args leviathan6 0000
-... GDB header omitted ...
-(gdb) disassemble main
-Dump of assembler code for function main:
-   0x080491c6 <+0>:	lea    0x4(%esp),%ecx
-   0x080491ca <+4>:	and    $0xfffffff0,%esp
-   0x080491cd <+7>:	push   -0x4(%ecx)
-   0x080491d0 <+10>:	push   %ebp
-   0x080491d1 <+11>:	mov    %esp,%ebp
-   0x080491d3 <+13>:	push   %ebx
-   0x080491d4 <+14>:	push   %ecx
-   0x080491d5 <+15>:	sub    $0x10,%esp
-   0x080491d8 <+18>:	mov    %ecx,%eax
-   0x080491da <+20>:	movl   $0x1bd3,-0xc(%ebp)
-   0x080491e1 <+27>:	cmpl   $0x2,(%eax)
-   0x080491e4 <+30>:	je     0x8049206 <main+64>
-   0x080491e6 <+32>:	mov    0x4(%eax),%eax
-   0x080491e9 <+35>:	mov    (%eax),%eax
-   0x080491eb <+37>:	sub    $0x8,%esp
-   0x080491ee <+40>:	push   %eax
-   0x080491ef <+41>:	push   $0x804a008
-   0x080491f4 <+46>:	call   0x8049040 <printf@plt>
-   0x080491f9 <+51>:	add    $0x10,%esp
-   0x080491fc <+54>:	sub    $0xc,%esp
-   0x080491ff <+57>:	push   $0xffffffff
-   0x08049201 <+59>:	call   0x8049080 <exit@plt>
-   0x08049206 <+64>:	mov    0x4(%eax),%eax
-   0x08049209 <+67>:	add    $0x4,%eax
-   0x0804920c <+70>:	mov    (%eax),%eax
-   0x0804920e <+72>:	sub    $0xc,%esp
-   0x08049211 <+75>:	push   %eax
-   0x08049212 <+76>:	call   0x80490a0 <atoi@plt>
-   0x08049217 <+81>:	add    $0x10,%esp
-   0x0804921a <+84>:	cmp    %eax,-0xc(%ebp)
-   0x0804921d <+87>:	jne    0x804924a <main+132>
-   0x0804921f <+89>:	call   0x8049050 <geteuid@plt>
-   0x08049224 <+94>:	mov    %eax,%ebx
-   0x08049226 <+96>:	call   0x8049050 <geteuid@plt>
-   0x0804922b <+101>:	sub    $0x8,%esp
-   0x0804922e <+104>:	push   %ebx
-   0x0804922f <+105>:	push   %eax
-   0x08049230 <+106>:	call   0x8049090 <setreuid@plt>
-   0x08049235 <+111>:	add    $0x10,%esp
-   0x08049238 <+114>:	sub    $0xc,%esp
-   ...
-End of assembler dump.
+The program expects a four-digit argument.
 
-(gdb) break *0x0804921a
-Breakpoint 1 at 0x804921a
+### Static Analysis with GDB
 
-(gdb) run
-Starting program: /home/leviathan6/leviathan6 0000
-[Thread debugging using libthread_db enabled]
-Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+Start GDB:
 
-Breakpoint 1, 0x0804921a in main ()
+```bash
+gdb --args ./leviathan6 0000
+```
 
-(gdb) info registers
-eax            0x0                 0
-ecx            0xffffd4e2          -11038
-edx            0x0                 0
-ebx            0xf7fade34          -134554060
-esp            0xffffd250          0xffffd250
-ebp            0xffffd268          0xffffd268
-esi            0xffffd340          -11456
-edi            0xf7ffcb60          -134231200
-eip            0x804921a           0x804921a <main+84>
-eflags         0x286               [ PF SF IF ]
+Disassemble `main`:
+
+```gdb
+disassemble main
+```
+
+The relevant instructions include:
+
+```text
+movl   $0x1bd3,-0xc(%ebp)
 ...
-
-(gdb) print $ebp-0xc
-$1 = (void *) 0xffffd25c
-
-(gdb) x 0xffffd4cc
-0xffffd4cc:	0x61687461
-
-(gdb) print/d 0x00001bd3
-$2 = 7123
-
-(gdb) exit
-A debugging session is active.
-
-	Inferior 1 [process 38] will be killed.
-
-Quit anyway? (y or n) y
-
-# Esecuzione finale con codice corretto
-leviathan6@leviathan:~$ ./leviathan6 7123
-$ whoami
-leviathan7
-$ cat /etc/leviathan_pass/leviathan7
-# → password per il livello 7
-# [REDACTED]
+call   atoi@plt
+...
+cmp    %eax,-0xc(%ebp)
 ```
 
-### 🧠 Spiegazione
-- Disassemblando `main` si nota che il programma popola `-0xc(%ebp)` con `0x1bd3`;
-- Il programma chiama `atoi` sull'argomento fornito e poi lo confronta (`cmp %eax, -0xc(%ebp)`);
-- Convertendo `0x1bd3` in decimale si ottiene `7123` — il codice giusto da passare a `leviathan6`;
-- Inserendo `7123` si ottiene la shell dell'utente `leviathan7` e si legge la password successiva.
+The binary stores the constant:
 
-### 🪄 Takeaway
-- GDB è lo strumento principe per estrarre valori hard-coded da binari.
-- Sapere convertire esadecimali in decimali è una operazione pratica nel reverse engineering.
+```text
+0x1bd3
+```
+
+and compares it with the integer obtained from the command-line argument through `atoi()`.
+
+Convert the constant to decimal:
+
+```gdb
+print/d 0x1bd3
+```
+
+Result:
+
+```text
+7123
+```
+
+### Verification
+
+Run the binary with the recovered value:
+
+```bash
+./leviathan6 7123
+```
+
+The program opens a shell as `leviathan7`.
+
+Retrieve the next password:
+
+```bash
+cat /etc/leviathan_pass/leviathan7
+```
+
+### Takeaway
+
+The level demonstrates a basic reverse-engineering workflow:
+
+- identify the input source;
+- locate the comparison;
+- recover hard-coded constants;
+- determine the expected value;
+- verify the result dynamically.
+
+GDB provides both static disassembly and runtime inspection capabilities for analysing compiled programs.
 
 ---
 
-## 🏁 Epilogo
+# Techniques Demonstrated
 
-Completare **Leviathan 0 → 7** rafforza competenze in:
-- analisi binaria e reverse engineering (strings, ltrace, gdb);
-- gestione di filesystem temporanei e symlink per aggirare limiti;
-- tecniche pratiche per leggere file protetti tramite programmi SUID-like.
+Leviathan provides practical experience with:
+
+- Linux filesystem enumeration
+- Hidden files and backups
+- Static binary analysis
+- Dynamic library-call tracing
+- `strings`
+- `ltrace`
+- GDB
+- Assembly-level inspection
+- `strcmp()` analysis
+- `system()` command construction
+- Symbolic-link exploitation
+- File permission analysis
+- Hard-coded credential discovery
+- Basic privilege-boundary analysis
 
 ---
 
-## 🙏 Crediti
+# Key Lessons
 
-**OverTheWire — Leviathan** è un progetto degli autori OverTheWire. Tutti i diritti dei contenuti originali appartengono ai rispettivi proprietari.
+The challenge reinforces several important security principles:
 
+- Sensitive data can remain exposed in backups and hidden files.
+- Static and dynamic analysis complement each other.
+- Runtime tracing can reveal values that are difficult to identify from normal execution.
+- Programs should not construct shell commands directly from user-controlled paths.
+- Symbolic links can redirect filesystem operations to unintended targets.
+- Elevated programs must carefully validate both input and filesystem paths.
+- Hard-coded secrets and authentication values can often be recovered through reverse engineering.
+- Small binaries can frequently be understood by identifying their input, comparison and privilege-transition logic.
+
+---
+
+# Conclusion
+
+Completing Leviathan 0–7 provides a practical introduction to Linux binary analysis and basic reverse engineering.
+
+The challenge progresses from simple information disclosure to dynamic tracing, symbolic-link manipulation and assembly-level analysis with GDB.
+
+The main workflow developed throughout the challenge is:
+
+```text
+Enumerate
+    ↓
+Identify executable or artefact
+    ↓
+Inspect statically
+    ↓
+Trace dynamically
+    ↓
+Identify input and trust boundaries
+    ↓
+Determine the security weakness
+    ↓
+Construct a controlled input
+    ↓
+Verify the resulting behaviour
+```
+
+These techniques form a useful foundation for further work in binary exploitation, reverse engineering and Linux security.
+
+---
+
+# Environment
+
+The walkthrough was originally performed using:
+
+```text
+Operating System: Ubuntu 22.04 LTS
+Shell: Bash
+Architecture: x86_64
+```
+
+The challenge binaries and services are provided by OverTheWire.
+
+---
+
+# Disclaimer
+
+This repository documents activity performed against the intentionally vulnerable OverTheWire Leviathan environment.
+
+The techniques described are intended for educational purposes, CTFs, security laboratories and systems for which explicit authorization has been obtained.
+
+Do not apply these techniques to systems without authorization.
+
+---
+
+# Credits
+
+OverTheWire — Leviathan
+
+https://overthewire.org/wargames/leviathan/
+
+All original challenge content and infrastructure belong to OverTheWire and its respective authors.
+
+This repository contains personal notes and walkthrough material created for educational purposes.
+
+---
+
+# Status
+
+Leviathan 0 → 7: Completed
